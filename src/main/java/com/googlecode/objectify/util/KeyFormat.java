@@ -126,7 +126,6 @@ public enum KeyFormat {
         if (app.startsWith("s~") || app.startsWith("f~") || app.startsWith("a~")) {
             app = app.substring(2);
         }
-
         final String namespace = (String) userKeyMessage.getField(referenceDescriptor.findFieldByName("name_space"));
         final DynamicMessage path = (DynamicMessage) userKeyMessage.getField(referenceDescriptor.findFieldByName("path"));
         final Descriptors.Descriptor pathDescriptor = keyDescriptor.findMessageTypeByName("Path");

@@ -14,15 +14,13 @@ import com.googlecode.objectify.test.entity.Employee;
 import com.googlecode.objectify.test.entity.Trivial;
 import com.googlecode.objectify.test.util.TestBase;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static com.google.common.truth.Truth.assertThat;
 import static com.googlecode.objectify.ObjectifyService.factory;
@@ -62,7 +60,8 @@ class QueryTests extends TestBase {
 		assertThat(q.keys()).containsExactlyElementsIn(this.keys);
 
 		// Just for the hell of it, test the other methods
-		assertThat(q.count()).isEqualTo(keys.size());
+		// TODO: re-enable when EMULATOR supports aggregation queries
+		//assertThat(q.count()).isEqualTo(keys.size());
 
 		assertThat(q.limit(1).keys()).containsExactly(this.keys.get(0));
 
@@ -204,11 +203,34 @@ class QueryTests extends TestBase {
 		assertThat(list).containsExactly(triv, child).inOrder();
 	}
 
-	/** */
+	/**
+	 * TODO: re-enable when EMULATOR supports aggregation queries
+	 */
 	@Test
-	void countWorks() throws Exception {
-		final int count = ofy().load().type(Trivial.class).count();
+	@Disabled
+	void aggregateCount() throws Exception {
+		final long count = ofy().load().type(Trivial.class).count();
 		assertThat(count).isEqualTo(2);
+	}
+
+	/**
+	 * TODO: re-enable when EMULATOR supports aggregation queries
+	 */
+	@Test
+	@Disabled
+	void aggregateSum() throws Exception {
+		final double value = ofy().load().type(Trivial.class).sum("someNumber");
+		assertThat((int)value).isEqualTo(3);
+	}
+
+	/**
+	 * TODO: re-enable when EMULATOR supports aggregation queries
+	 */
+	@Test
+	@Disabled
+	void aggregateAvg() throws Exception {
+		final double value = ofy().load().type(Trivial.class).avg("someNumber");
+		assertThat(value).isEqualTo(1.5);
 	}
 
 	/** */

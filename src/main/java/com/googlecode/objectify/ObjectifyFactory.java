@@ -3,6 +3,7 @@ package com.googlecode.objectify;
 import com.google.cloud.datastore.Datastore;
 import com.google.cloud.datastore.DatastoreOptions;
 import com.google.cloud.datastore.IncompleteKey;
+import com.google.cloud.datastore.KeyFactory;
 import com.googlecode.objectify.cache.CachingAsyncDatastore;
 import com.googlecode.objectify.cache.EntityMemcache;
 import com.googlecode.objectify.cache.MemcacheService;
@@ -20,6 +21,7 @@ import com.googlecode.objectify.impl.Registrar;
 import com.googlecode.objectify.impl.Transactor;
 import com.googlecode.objectify.impl.TypeUtils;
 import com.googlecode.objectify.impl.translate.Translators;
+import com.googlecode.objectify.util.Closeable;
 import net.spy.memcached.MemcachedClient;
 
 import java.lang.reflect.Constructor;
@@ -40,11 +42,18 @@ import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 /**
- * <p>Factory which allows us to construct implementations of the Objectify interface.
- * You should usually use the ObjectifyService to access Objectify.</p>
+ * <p>ObjectifyFactory encapsulates a connection to a single datastore, and allows the datastore
+ * to be queries and manipulated.</p>
  *
- * <p>ObjectifyFactory is designed to be subclassed; much default behavior can be changed
- * by overriding methods.  In particular, see createObjectify(), construct(), getAsyncDatastoreService().</p>
+ * <p>For most applications which connect to a single datastore, you should use the
+ * ObjectifyService class to initialize the ObjectifyFactory and make {@code ofy()} calls.
+ * If your application connects to multiple datastores, you can skip the ObjectifyService
+ * and manage multiple ObjectifyFactory instances yourself.</p>
+ *
+ * <p>Unlike many software libraries with a hard distinction between public and private APIs,
+ * Objectify has three layers. Public methods are robust and only change on major version numbers.
+ * However, there is quite a lot of internal behavior exposed, especially if you subclass the
+ * ObjectifyFactory. This "middle ground" is available to you, though we can't promise it won't change.</p>
  *
  * @author Jeff Schnitzer <jeff@infohazard.org>
  */
@@ -202,32 +211,6 @@ public class ObjectifyFactory implements Forge
 	}
 
 	/**
-	 * This is the beginning of any Objectify session.  It creates an Objectify instance with the default
-	 * options, unless you override this method to alter the options.  You can also override this method
-	 * to produce a wholly different Objectify implementation (possibly using ObjectifyWrapper).
-	 *
-	 * <p>The default options are:</p>
-	 *
-	 * <ul>
-	 * <li>Do NOT begin a transaction.</li>
-	 * <li>DO use a global cache.</li>
-	 * <li>Apply no deadline to calls.</li>
-	 * </ul>
-	 *
-	 * <p>Note that when using Objectify you will almost never directly call this method.  Instead you
-	 * should call the static ofy() method on ObjectifyService.</p>
-	 *
-	 * @return a new Objectify instance
-	 *
-	 * @deprecated This method is a holdover from the 1.x days and will be removed soon.
-	 * 		Clients should use {@link ObjectifyService#ofy()} to obtain Objectify instances.
-	 */
-	@Deprecated
-	public Objectify begin() {
-		return new ObjectifyImpl(this);
-	}
-
-	/**
 	 * <p>All POJO entity classes which are to be managed by Objectify
 	 * must be registered first.  This method must be called in a single-threaded
 	 * mode sometime around application initialization.</p>
@@ -242,65 +225,20 @@ public class ObjectifyFactory implements Forge
 	}
 
 	/**
+	 * <p>Gets the master list of all registered TranslatorFactory objects.  By adding Translators, Objectify
+	 * can process additional field types which are not part of the standard GAE SDK.  <b>You must
+	 * add translators *before* registering entity pojo classes.</b></p>
+	 *
+	 * @return the repository of TranslatorFactory objects, to which you can optionally add translators
+	 */
+	public Translators getTranslators() {
+		return this.translators;
+	}
+
+	/**
 	 * Get the object that tracks memcache stats.
 	 */
 	public EntityMemcacheStats getMemcacheStats() { return this.memcacheStats; }
-
-	/**
-	 * Sets the error handler for the main memcache object.
-	 */
-//	@SuppressWarnings("deprecation")
-//	public void setMemcacheErrorHandler(final com.google.appengine.api.memcache.ErrorHandler handler) {
-//		this.entityMemcache.setErrorHandler(handler);
-//	}
-
-	//
-	// Stuff which should only be necessary internally, but might be useful to others.
-	//
-
-	/**
-	 * @return the metadata for a kind of typed object
-	 * @throws IllegalArgumentException if the kind has not been registered
-	 */
-	public <T> EntityMetadata<T> getMetadata(final Class<T> clazz) throws IllegalArgumentException {
-		return this.registrar.getMetadataSafe(clazz);
-	}
-
-	/**
-	 * @return the metadata for a kind of entity based on its key
-	 * @throws IllegalArgumentException if the kind has not been registered
-	 */
-	public <T> EntityMetadata<T> getMetadata(final com.google.cloud.datastore.Key key) throws IllegalArgumentException {
-		return this.registrar.getMetadataSafe(key.getKind());
-	}
-
-	/**
-	 * @return the metadata for a kind of entity based on its key
-	 * @throws IllegalArgumentException if the kind has not been registered
-	 */
-	public <T> EntityMetadata<T> getMetadata(final Key<T> key) throws IllegalArgumentException {
-		return this.registrar.getMetadataSafe(key.getKind());
-	}
-
-	/**
-	 * Gets metadata for the specified kind, returning null if nothing registered. This method is not like
-	 * the others because it returns null instead of throwing an exception if the kind is not found.
-	 * @return null if the kind is not registered.
-	 */
-	public <T> EntityMetadata<T> getMetadata(final String kind) {
-		return this.registrar.getMetadata(kind);
-	}
-
-	/**
-	 * Named differently so you don't accidentally use the Object form
-	 * @return the metadata for a kind of typed object.
-	 * @throws IllegalArgumentException if the kind has not been registered
-	 */
-	@SuppressWarnings("unchecked")
-	public <T> EntityMetadata<T> getMetadataForEntity(final T obj) throws IllegalArgumentException {
-		// Type erasure sucks
-		return (EntityMetadata<T>)this.getMetadata(obj.getClass());
-	}
 
 	/**
 	 * Allocates a single id from the allocator for the specified kind.  Safe to use in concert
@@ -380,57 +318,72 @@ public class ObjectifyFactory implements Forge
 	}
 
 	/**
-	 * <p>Gets the master list of all registered TranslatorFactory objects.  By adding Translators, Objectify
-	 * can process additional field types which are not part of the standard GAE SDK.  <b>You must
-	 * add translators *before* registering entity pojo classes.</b></p>
+	 * <p>Runs one unit of work, making the root Objectify context available and performing all necessary
+	 * housekeeping. Either this method or {@code begin()} must be called before {@code ofy()} can be called.</p>
 	 *
-	 * @return the repository of TranslatorFactory objects, to which you can optionally add translators
+	 * <p>Does not start a transaction. If you want a transaction, call {@code ofy().transact()}.</p>
+	 *
+	 * @return the result of the work.
 	 */
-	public Translators getTranslators() {
-		return this.translators;
+	public <R> R run(final Work<R> work) {
+		try (Closeable closeable = begin()) {
+			return work.run();
+		}
 	}
 
 	/**
-	 * Some tools for working with keys. This is an internal Objectify API and subject to change without
-	 * notice. You probably want the Key.create() methods instead.
+	 * <p>Exactly the same behavior as the method that takes a {@code Work<R>}, but doesn't force you to return
+	 * something from your lambda.</p>
 	 */
-	public Keys keys() {
-		return keys;
+	public void run(final Runnable work) {
+		run(() -> {
+			work.run();
+			return null;
+		});
 	}
 
 	/**
-	 * The method to call at any time to get the current Objectify, which may change depending on txn context.
-	 * Normally you should use the static {@link ObjectifyService#ofy()} which calls this method.
+	 * <p>An alternative to run() which is somewhat easier to use with testing (ie, @Before and @After) frameworks.
+	 * You must close the return value at the end of the request in a finally block.</p>
+	 *
+	 * <p>This method is not typically necessary - in a normal request, the ObjectifyFilter takes care of this housekeeping
+	 * for you. However, in unit tests or remote API calls it can be useful.</p>
+	 */
+	public Closeable begin() {
+		return this.open();
+	}
+
+	/**
+	 * The method to call at any time to get the current Objectify, which may change depending on txn context. This
+	 * is the start point for queries and data manipulation.
 	 */
 	public Objectify ofy() {
 		final Deque<Objectify> stack = stacks.get();
 
 		if (stack.isEmpty())
-			throw new IllegalStateException("You have not started an Objectify context. You are probably missing the " +
-					"ObjectifyFilter. If you are not running in the context of an http request, see the " +
-					"ObjectifyService.run() method.");
+			throw new IllegalStateException("You have not started an Objectify context. You are missing " +
+					"a call to run() or you do not have the ObjectifyFilter installed.");
 
 		return stack.getLast();
 	}
 
 	/**
-	 * <p>Start a scope of work. This is the outermost scope of work, typically created by the ObjectifyFilter
-	 * or by one of the methods on ObjectifyService. You need one of these to do anything at all.</p>
+	 * <p>This will be removed from the public API in the future.</p>
 	 */
-	public ObjectifyImpl open() {
+	private ObjectifyImpl open() {
 		final ObjectifyImpl objectify = new ObjectifyImpl(this);
 		stacks.get().add(objectify);
 		return objectify;
 	}
 
-	/** This is only public because it is used from the impl package; don't use this as a public API */
+	/** This is for internal housekeeping and is not part of the public API */
 	public ObjectifyImpl open(final ObjectifyOptions opts, final Transactor transactor) {
 		final ObjectifyImpl objectify = new ObjectifyImpl(this, opts, transactor);
 		stacks.get().add(objectify);
 		return objectify;
 	}
 
-	/** Pops context off of stack after a transaction completes. For internal housekeeping only. */
+	/** This is for internal housekeeping and is not part of the public API */
 	public void close(final Objectify ofy) {
 		final Deque<Objectify> stack = stacks.get();
 		if (stack.isEmpty())
@@ -438,5 +391,140 @@ public class ObjectifyFactory implements Forge
 
 		final Objectify popped = stack.removeLast();
 		assert popped == ofy : "Mismatched objectify instances; somehow the stack was corrupted";
+	}
+
+	//
+	// Stuff which should only be necessary internally, but might be useful to others.
+	//
+
+	/**
+	 * @return the metadata for a kind of typed object
+	 * @throws IllegalArgumentException if the kind has not been registered
+	 */
+	public <T> EntityMetadata<T> getMetadata(final Class<T> clazz) throws IllegalArgumentException {
+		return this.registrar.getMetadataSafe(clazz);
+	}
+
+	/**
+	 * @return the metadata for a kind of entity based on its key
+	 * @throws IllegalArgumentException if the kind has not been registered
+	 */
+	public <T> EntityMetadata<T> getMetadata(final com.google.cloud.datastore.Key key) throws IllegalArgumentException {
+		return this.registrar.getMetadataSafe(key.getKind());
+	}
+
+	/**
+	 * @return the metadata for a kind of entity based on its key
+	 * @throws IllegalArgumentException if the kind has not been registered
+	 */
+	public <T> EntityMetadata<T> getMetadata(final Key<T> key) throws IllegalArgumentException {
+		return this.registrar.getMetadataSafe(key.getKind());
+	}
+
+	/**
+	 * Gets metadata for the specified kind, returning null if nothing registered. This method is not like
+	 * the others because it returns null instead of throwing an exception if the kind is not found.
+	 * @return null if the kind is not registered.
+	 */
+	public <T> EntityMetadata<T> getMetadata(final String kind) {
+		return this.registrar.getMetadata(kind);
+	}
+
+	/**
+	 * Named differently so you don't accidentally use the Object form
+	 * @return the metadata for a kind of typed object.
+	 * @throws IllegalArgumentException if the kind has not been registered
+	 */
+	@SuppressWarnings("unchecked")
+	public <T> EntityMetadata<T> getMetadataForEntity(final T obj) throws IllegalArgumentException {
+		// Type erasure sucks
+		return (EntityMetadata<T>)this.getMetadata(obj.getClass());
+	}
+
+	/**
+	 * Some tools for working with keys. This is an internal Objectify API and subject to change without
+	 * notice. You probably want the key() methods instead.
+	 */
+	public Keys keys() {
+		return keys;
+	}
+
+	/** Create an Objectify key from the native datastore key */
+	public <T> Key<T> key(final com.google.cloud.datastore.Key raw) {
+		if (raw == null)
+			throw new NullPointerException("Cannot create a Key<?> from a null datastore Key");
+
+		return new Key<>(raw);
+	}
+
+	/** Create an Objectify key from a type and numeric id */
+	public <T> Key<T> key(final Class<? extends T> kindClass, final long id) {
+		return key((String)null, kindClass, id);
+	}
+
+	/** Create an Objectify key from a type and string id */
+	public <T> Key<T> key(final Class<? extends T> kindClass, final String name) {
+		return key((String)null, kindClass, name);
+	}
+
+	/** Create an Objectify key from a parent, type, and numeric id */
+	public <T> Key<T> key(final Key<?> parent, final Class<? extends T> kindClass, final long id) {
+		final String kind = Key.getKind(kindClass);
+
+		if (parent == null) {
+			final KeyFactory kf = Keys.adjustNamespace(datastore().newKeyFactory().setKind(kind), null);
+			final com.google.cloud.datastore.Key raw = kf.newKey(id);
+			return new Key<>(raw);
+		} else {
+			final com.google.cloud.datastore.Key raw = com.google.cloud.datastore.Key.newBuilder(Key.key(parent), kind, id).build();
+			return new Key<>(raw);
+		}
+	}
+
+	/** Create an Objectify key from a parent, type, and string id */
+	public <T> Key<T> key(final Key<?> parent, final Class<? extends T> kindClass, final String name) {
+		final String kind = Key.getKind(kindClass);
+
+		if (parent == null) {
+			final KeyFactory kf = Keys.adjustNamespace(datastore().newKeyFactory().setKind(kind), null);
+			final com.google.cloud.datastore.Key raw = kf.newKey(name);
+			return new Key<>(raw);
+		} else {
+			final com.google.cloud.datastore.Key raw = com.google.cloud.datastore.Key.newBuilder(Key.key(parent), kind, name).build();
+			return new Key<>(raw);
+		}
+	}
+
+	/** Create an Objectify key from a namespace, type, and numeric id */
+	public <T> Key<T> key(final String namespace, final Class<? extends T> kindClass, final long id) {
+		final String kind = Key.getKind(kindClass);
+
+		final KeyFactory kf = Keys.adjustNamespace(datastore().newKeyFactory().setKind(kind), namespace);
+		final com.google.cloud.datastore.Key raw = kf.newKey(id);
+		return new Key<>(raw);
+	}
+
+	/** Create an Objectify key from a namespace, type, and string id */
+	public <T> Key<T> key(final String namespace, final Class<? extends T> kindClass, final String name) {
+		final String kind = Key.getKind(kindClass);
+
+		final KeyFactory kf = Keys.adjustNamespace(datastore().newKeyFactory().setKind(kind), namespace);
+		final com.google.cloud.datastore.Key raw = kf.newKey(name);
+		return new Key<>(raw);
+	}
+
+	/** Create a key from a registered POJO entity. */
+	public <T> Key<T> key(final T pojo) {
+		return keys().keyOf(pojo, null);
+	}
+
+	/** Create a Ref from an existing key */
+	public <T> Ref<T> ref(final Key<T> key) {
+		return new Ref<>(key, this);
+	}
+
+	/** Creates a Ref from a registered pojo entity */
+	public <T> Ref<T> ref(final T value) {
+		return ref(key(value));
 	}
 }

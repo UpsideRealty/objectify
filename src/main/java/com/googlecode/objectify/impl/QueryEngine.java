@@ -1,13 +1,21 @@
 package com.googlecode.objectify.impl;
 
+import com.google.cloud.datastore.AggregationQuery;
+import com.google.cloud.datastore.AggregationResult;
+import com.google.cloud.datastore.AggregationResults;
 import com.google.cloud.datastore.Entity;
 import com.google.cloud.datastore.EntityQuery;
 import com.google.cloud.datastore.KeyQuery;
 import com.google.cloud.datastore.ProjectionEntityQuery;
+import com.google.cloud.datastore.Query;
 import com.google.cloud.datastore.QueryResults;
-import com.google.common.collect.Iterators;
+import com.google.cloud.datastore.StructuredQuery;
+import com.google.cloud.datastore.aggregation.Aggregation;
+import com.google.cloud.datastore.aggregation.AggregationBuilder;
+import com.google.common.collect.Iterables;
 import com.googlecode.objectify.Key;
 import lombok.RequiredArgsConstructor;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -76,13 +84,34 @@ public class QueryEngine
 	}
 
 	/**
-	 * The fundamental query count operation. This doesn't appear to be implemented in the new SDK, so we simulate
-	 * with a keys-only query.
+	 * Run an arbitrary aggregation query.
 	 */
-	public int queryCount(final KeyQuery query) {
-		log.trace("Starting count query");
+	@SneakyThrows
+	public AggregationResult queryAggregations(final StructuredQuery<?> query, final Aggregation... aggregations) {
+		log.trace("Starting aggregation query");
 
-		final QueryResults<com.google.cloud.datastore.Key> results = ds.run(query);
-		return Iterators.size(results);
+		final AggregationQuery aggQuery = Query.newAggregationQueryBuilder()
+				.over(query)
+				.addAggregations(aggregations)
+				.build();
+
+		final AggregationResults results = ds.runAggregation(aggQuery).get();
+		return Iterables.getOnlyElement(results);
+	}
+
+	/**
+	 * Run an arbitrary aggregation query.
+	 */
+	@SneakyThrows
+	public AggregationResult queryAggregations(final StructuredQuery<?> query, final AggregationBuilder<?>... aggregations) {
+		log.trace("Starting aggregation query");
+
+		final AggregationQuery aggQuery = Query.newAggregationQueryBuilder()
+				.over(query)
+				.addAggregations(aggregations)
+				.build();
+
+		final AggregationResults results = ds.runAggregation(aggQuery).get();
+		return Iterables.getOnlyElement(results);
 	}
 }

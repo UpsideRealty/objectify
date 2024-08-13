@@ -1,6 +1,9 @@
 package com.googlecode.objectify.cmd;
 
+import com.google.cloud.datastore.AggregationResult;
 import com.google.cloud.datastore.Cursor;
+import com.google.cloud.datastore.aggregation.Aggregation;
+import com.google.cloud.datastore.aggregation.AggregationBuilder;
 
 
 /**
@@ -209,16 +212,70 @@ public interface SimpleQuery<T> extends QueryExecute<T>
 	QueryKeys<T> keys();
 
 	/**
-	 * <p>Count the total number of values in the result.  <em>limit</em> and <em>offset</em> are obeyed.
-	 * This is somewhat faster than fetching, but the time still grows with the number of results.
-	 * The datastore actually walks through the result set and counts for you.</p>
+	 * <p>Run the specified aggregations given the query setup as currently defined. <em>limit</em> and <em>offset</em> are obeyed.</p>
 	 *
-	 * <p>Immediately executes the query; there is no async version of this method.</p>
-	 *
-	 * <p>WARNING:  Each counted entity is billed as a "datastore minor operation".  Even though these
-	 * are free, they may take significant time because they require an index walk.</p>
+	 * @see <a href="https://cloud.google.com/datastore/docs/aggregation-queries">Google's Aggregation Query Documentation</a>
 	 */
-	int count();
+	AggregationResult aggregate(final Aggregation... aggregations);
+
+	/**
+	 * <p>Run the specified aggregations given the query setup as currently defined. <em>limit</em> and <em>offset</em> are obeyed.</p>
+	 *
+	 * @see <a href="https://cloud.google.com/datastore/docs/aggregation-queries">Google's Aggregation Query Documentation</a>
+	 */
+	AggregationResult aggregate(final AggregationBuilder<?>... aggregations);
+
+	/**
+	 * <p>Count the total number of values in the result.</p>
+	 *
+	 * <p>Shorthand for {@code aggregate(Aggregation.count().as("count")).getLong("count")}.</p>
+	 *
+	 * <p>This method should return {@code long}, but to preserve backwards compatibility it returns int.
+	 * This may change in the future.</p>
+	 *
+	 * @see <a href="https://cloud.google.com/datastore/docs/aggregation-queries#behavior_and_limitations">Aggregation Query Behavior and Limitations</a>
+	 */
+	default int count() {
+		final AggregationResult result = aggregate(Aggregation.count().as("count"));
+		return result.getLong("count").intValue();
+	}
+
+	/**
+	 * <p>Sum the values of the specified property over the specified query. Always produces a floating-point value.</p>
+	 *
+	 * <p>Shorthand for {@code aggregate(Aggregation.sum(property).as("value")).getDouble("value")}.</p>
+	 *
+	 * @see <a href="https://cloud.google.com/datastore/docs/aggregation-queries#behavior_and_limitations">Aggregation Query Behavior and Limitations</a>
+	 */
+	default double sum(final String property) {
+		final AggregationResult result = aggregate(Aggregation.sum(property).as("sum"));
+		return result.getDouble("sum");
+	}
+
+	/**
+	 * <p>Sum the values of the specified property over the specified query. Always produces an integer value. If
+	 * the property values are floating point, the result will be cast to long.</p>
+	 *
+	 * <p>Shorthand for {@code aggregate(Aggregation.sum(property).as("value")).getLong("value")}.</p>
+	 *
+	 * @see <a href="https://cloud.google.com/datastore/docs/aggregation-queries#behavior_and_limitations">Aggregation Query Behavior and Limitations</a>
+	 */
+	default long sumLong(final String property) {
+		final AggregationResult result = aggregate(Aggregation.sum(property).as("sum"));
+		return result.getLong("sum");
+	}
+
+	/**
+	 * <p>Average the values of the specified property over the specified query.</p>
+	 *
+	 * <p>Shorthand for {@code aggregate(Aggregation.avg(property).as("value")).getDouble("value")}.</p>
+	 *
+	 * @see <a href="https://cloud.google.com/datastore/docs/aggregation-queries#behavior_and_limitations">Aggregation Query Behavior and Limitations</a>
+	 */
+	default double avg(final String property) {
+		final AggregationResult result = aggregate(Aggregation.avg(property).as("avg"));
+		return result.getDouble("avg");
+	}
 
 	/**
 	 * <p>Generates a string that consistently and uniquely specifies this query.  There

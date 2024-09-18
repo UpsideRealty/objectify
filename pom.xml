@@ -120,7 +120,6 @@
 						<phase>compile</phase>
 						<goals>
 							<goal>display-dependency-updates</goal>
-							<goal>display-plugin-updates</goal>
 						</goals>
 					</execution>
 				</executions>

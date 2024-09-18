@@ -54,7 +54,7 @@ public class MemcacheServiceRetryProxy implements InvocationHandler
 				return meth.invoke(this.raw, args);
 			} catch (InvocationTargetException ex) {
 				if (i == (this.tries - 1))
-					log.error("Memcache operation failed, giving up", ex);
+					log.warn("Memcache operation failed, giving up", ex);
 				else
 					log.warn("Error performing memcache operation, retrying: " + meth, ex);
 			}

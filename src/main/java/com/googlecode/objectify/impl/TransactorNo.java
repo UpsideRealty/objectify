@@ -5,12 +5,13 @@ import com.google.common.base.Preconditions;
 import com.google.protobuf.ByteString;
 import com.google.rpc.Code;
 import com.googlecode.objectify.ObjectifyFactory;
+import com.googlecode.objectify.TxnOptions;
 import com.googlecode.objectify.TxnType;
 import com.googlecode.objectify.Work;
-
-import java.util.concurrent.atomic.AtomicReference;
-
 import lombok.extern.slf4j.Slf4j;
+
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Transactor which represents the absence of a transaction.
@@ -18,59 +19,25 @@ import lombok.extern.slf4j.Slf4j;
  * @author Jeff Schnitzer <jeff@infohazard.org>
  */
 @Slf4j
-class TransactorNo extends Transactor
-{
-	/**
-	 */
+class TransactorNo extends Transactor {
+
 	TransactorNo(final ObjectifyFactory factory) {
 		super(factory);
 	}
 
-	/**
-	 */
 	TransactorNo(final ObjectifyFactory factory, final Session session) {
 		super(factory, session);
 	}
 
-	/* (non-Javadoc)
-	 * @see com.googlecode.objectify.Objectify#getTransaction()
-	 */
 	@Override
 	public AsyncTransactionImpl getTransaction() {
 		// This version doesn't have a transaction, always null.
 		return null;
 	}
 
-	/* (non-Javadoc)
-	 * @see com.googlecode.objectify.impl.cmd.Transactor#transactionless()
-	 */
 	@Override
 	public ObjectifyImpl transactionless(ObjectifyImpl parent) {
 		return parent;
-	}
-
-	/* (non-Javadoc)
-	 * @see com.googlecode.objectify.impl.cmd.Transactor#execute(com.googlecode.objectify.TxnType, com.googlecode.objectify.Work)
-	 */
-	@Override
-	public <R> R execute(final ObjectifyImpl parent, final TxnType txnType, final Work<R> work) {
-		switch (txnType) {
-			case MANDATORY:
-				throw new IllegalStateException("MANDATORY transaction but no transaction present");
-
-			case NOT_SUPPORTED:
-			case NEVER:
-			case SUPPORTS:
-				return work.run();
-
-			case REQUIRED:
-			case REQUIRES_NEW:
-				return transact(parent, work);
-
-			default:
-				throw new IllegalStateException("Impossible, some unknown txn type");
-		}
-
 	}
 
 	@Override
@@ -78,26 +45,22 @@ class TransactorNo extends Transactor
 		return work.run();
 	}
 
-	/* (non-Javadoc)
-	 * @see com.googlecode.objectify.impl.Transactor#transact(com.googlecode.objectify.impl.ObjectifyImpl, com.googlecode.objectify.Work)
-	 */
 	@Override
-	public <R> R transact(final ObjectifyImpl parent, final Work<R> work) {
-		return this.transactNew(parent, DEFAULT_TRY_LIMIT, work);
+	public <R> R transact(final ObjectifyImpl parent, final TxnOptions options, final Work<R> work) {
+		return transactNew(parent, options, work);
 	}
 
-	/* (non-Javadoc)
-	 * @see com.googlecode.objectify.impl.Transactor#transactNew(com.googlecode.objectify.impl.ObjectifyImpl, int, com.googlecode.objectify.Work)
-	 */
 	@Override
-	public <R> R transactNew(final ObjectifyImpl parent, int limitTries, final Work<R> work) {
-		Preconditions.checkArgument(limitTries >= 1);
-		final int ORIGINAL_TRIES = limitTries;
+	public <R> R transactNew(final ObjectifyImpl parent, final TxnOptions options, final Work<R> work) {
 
-		AtomicReference<ByteString> prevTxnHandle = new AtomicReference<>();
+		int limitTries = options.limitTries();
+
+		Preconditions.checkArgument(limitTries >= 1);
+
+		final AtomicReference<ByteString> prevTxnHandle = new AtomicReference<>();
 		while (true) {
 			try {
-				return transactOnce(parent, work, prevTxnHandle);
+				return transactOnce(parent, work, options, prevTxnHandle);
 			} catch (DatastoreException ex) {
 
 				if (!isRetryable(ex)) {
@@ -109,17 +72,17 @@ class TransactorNo extends Transactor
 					log.trace("Details of transaction failure", ex);
 					try {
 						// Do increasing backoffs with randomness
-						Thread.sleep(Math.min(10000, (long) ((0.5 * Math.random() + 0.5) * 200 * (ORIGINAL_TRIES - limitTries + 2))));
+						Thread.sleep(Math.min(10000, (long) ((0.5 * Math.random() + 0.5) * 200 * (options.limitTries() - limitTries + 2))));
 					} catch (InterruptedException ignored) {
 					}
 				} else {
-					throw new DatastoreException(ex.getCode(), "Failed retrying datastore " + ORIGINAL_TRIES + " times ", ex.getReason(), ex);
+					throw new DatastoreException(ex.getCode(), "Failed retrying datastore " +  options.limitTries() + " times ", ex.getReason(), ex);
 				}
 			}
 		}
 	}
 
-    private static boolean isRetryable(DatastoreException ex) {
+	private static boolean isRetryable(DatastoreException ex) {
         // ex.isRetryable() doesn't work because the SDK considers all transactions to be non-retryable. Objectify
         // has always assumed that transactions are idempotent and retries accordingly. So we have to explicitly
         // check against code 10, which is ABORTED. https://cloud.google.com/datastore/docs/concepts/errors
@@ -143,9 +106,11 @@ class TransactorNo extends Transactor
 	/**
 	 * One attempt at executing a transaction
 	 */
-	private <R> R transactOnce(final ObjectifyImpl parent, final Work<R> work, final AtomicReference<ByteString> prevTxnHandle) {
-		final ObjectifyImpl txnOfy = parent.factory().open(parent.getOptions(), new TransactorYes(parent.factory(), parent.getOptions().isCache(), this,
-			prevTxnHandle.get()));
+	private <R> R transactOnce(final ObjectifyImpl parent, final Work<R> work, final TxnOptions options, final AtomicReference<ByteString> prevTxnHandle) {
+		final ObjectifyImpl txnOfy = parent.factory().open(
+			parent.getOptions(),
+			new TransactorYes(parent.factory(), options, parent.getOptions().isCache(), this, Optional.ofNullable(prevTxnHandle.get()))
+		);
 		prevTxnHandle.set(txnOfy.getTransaction().getTransactionHandle());
 
 		boolean committedSuccessfully = false;
@@ -186,4 +151,26 @@ class TransactorNo extends Transactor
 			((PrivateAsyncTransaction) txnOfy.getTransaction()).runCommitListeners();
 		}
 	}
+
+	@Override
+	public <R> R execute(final ObjectifyImpl parent, final TxnType txnType, final Work<R> work) {
+		switch (txnType) {
+			case MANDATORY:
+				throw new IllegalStateException("MANDATORY transaction but no transaction present");
+
+			case NOT_SUPPORTED:
+			case NEVER:
+			case SUPPORTS:
+				return work.run();
+
+			case REQUIRED:
+			case REQUIRES_NEW:
+				return transact(parent, TxnOptions.deflt(), work);
+
+			default:
+				throw new IllegalStateException("Impossible, some unknown txn type");
+		}
+
+	}
+
 }

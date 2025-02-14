@@ -2,8 +2,11 @@ package com.googlecode.objectify.impl;
 
 import com.google.protobuf.ByteString;
 import com.googlecode.objectify.ObjectifyFactory;
+import com.googlecode.objectify.TxnOptions;
 import com.googlecode.objectify.TxnType;
 import com.googlecode.objectify.Work;
+
+import java.util.Optional;
 
 /**
  * Implementation for when we start a transaction.  Maintains a separate session, but then copies all
@@ -11,8 +14,8 @@ import com.googlecode.objectify.Work;
  *
  * @author Jeff Schnitzer <jeff@infohazard.org>
  */
-class TransactorYes extends Transactor
-{
+class TransactorYes extends Transactor {
+
 	/** Our transaction. */
 	private final AsyncTransaction transaction;
 
@@ -20,18 +23,15 @@ class TransactorYes extends Transactor
 	private final TransactorNo parentTransactor;
 
 	/**
+	 * The low-level transaction object is created here.
 	 */
-	TransactorYes(final ObjectifyFactory factory, final boolean cache, final TransactorNo parentTransactor,
-	    ByteString prevTxnHandle) {
+	TransactorYes(final ObjectifyFactory factory, final TxnOptions options, final boolean cache, final TransactorNo parentTransactor, final Optional<ByteString> prevTxnHandle) {
 		super(factory);
 
-		this.transaction = factory.asyncDatastore(cache).newTransaction(this::committed, prevTxnHandle);
+		this.transaction = factory.asyncDatastore(cache).newTransaction(options, this::committed, prevTxnHandle);
 		this.parentTransactor = parentTransactor;
 	}
 
-	/* (non-Javadoc)
-	 * @see com.googlecode.objectify.impl.cmd.Transactor#getTransaction()
-	 */
 	@Override
 	public AsyncTransaction getTransaction() {
 		return this.transaction;
@@ -46,9 +46,30 @@ class TransactorYes extends Transactor
 		return parent.transactor(new TransactorNo(parent.factory(), parentTransactor.getSession()));
 	}
 
-	/* (non-Javadoc)
-	 * @see com.googlecode.objectify.impl.cmd.Transactor#execute(com.googlecode.objectify.TxnType, com.googlecode.objectify.Work)
+	@Override
+	public <R> R transactionless(final ObjectifyImpl parent, final Work<R> work) {
+		final ObjectifyImpl ofy = parent.factory().open(parent.getOptions(), new TransactorNo(parent.factory(), parentTransactor.getSession()));
+		try {
+			return work.run();
+		} finally {
+			ofy.close();
+		}
+	}
+
+	@Override
+	public <R> R transact(final ObjectifyImpl parent, final TxnOptions options, final Work<R> work) {
+		return work.run();
+	}
+
+	/**
+	 * We need to make sure the parentSession is the transactionless session, not the session
+	 * for our transaction.  This gives proper transaction isolation.
 	 */
+	@Override
+	public <R> R transactNew(final ObjectifyImpl parent, final TxnOptions options, final Work<R> work) {
+		return transactionless(parent).transactNew(options, work);
+	}
+
 	@Override
 	public <R> R execute(final ObjectifyImpl parent, final TxnType txnType, final Work<R> work) {
 		switch (txnType) {
@@ -64,38 +85,11 @@ class TransactorYes extends Transactor
 				throw new IllegalStateException("NEVER transaction type but transaction present");
 
 			case REQUIRES_NEW:
-				return transactNew(parent, Transactor.DEFAULT_TRY_LIMIT, work);
+				return transactNew(parent, TxnOptions.deflt(), work);
 
 			default:
 				throw new IllegalStateException("Impossible, some unknown txn type");
 		}
-	}
-
-	@Override
-	public <R> R transactionless(final ObjectifyImpl parent, final Work<R> work) {
-		final ObjectifyImpl ofy = parent.factory().open(parent.getOptions(), new TransactorNo(parent.factory(), parentTransactor.getSession()));
-		try {
-			return work.run();
-		} finally {
-			ofy.close();
-		}
-	}
-
-	/* (non-Javadoc)
-	 * @see com.googlecode.objectify.impl.Transactor#transact(com.googlecode.objectify.impl.ObjectifyImpl, com.googlecode.objectify.Work)
-	 */
-	@Override
-	public <R> R transact(final ObjectifyImpl parent, final Work<R> work) {
-		return work.run();
-	}
-
-	/**
-	 * We need to make sure the parentSession is the transactionless session, not the session
-	 * for our transaction.  This gives proper transaction isolation.
-	 */
-	@Override
-	public <R> R transactNew(final ObjectifyImpl parent, final int limitTries, final Work<R> work) {
-		return transactionless(parent).transactNew(limitTries, work);
 	}
 
 	/**

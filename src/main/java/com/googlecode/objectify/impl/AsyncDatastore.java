@@ -1,6 +1,9 @@
 package com.googlecode.objectify.impl;
 
 import com.google.protobuf.ByteString;
+import com.googlecode.objectify.TxnOptions;
+
+import java.util.Optional;
 
 /**
  * The new datastore SDK has a neat structure of interfaces and implementations (transaction, datastorereader, etc)
@@ -9,11 +12,15 @@ import com.google.protobuf.ByteString;
  */
 public interface AsyncDatastore extends AsyncDatastoreReaderWriter {
 
-	/**
-	 */
-	AsyncTransaction newTransaction(Runnable afterCommit);
+	@Deprecated
+	default AsyncTransaction newTransaction(Runnable afterCommit) {
+		return newTransaction(TxnOptions.deflt(), afterCommit, Optional.empty());
+	}
 
-	/**
-	*/
-	AsyncTransaction newTransaction(Runnable afterCommit, ByteString prevTxnHandle);
+	@Deprecated
+	default AsyncTransaction newTransaction(Runnable afterCommit, ByteString prevTxnHandle) {
+		return newTransaction(TxnOptions.deflt(), afterCommit, Optional.ofNullable(prevTxnHandle));
+	}
+
+	AsyncTransaction newTransaction(TxnOptions options, Runnable afterCommit, Optional<ByteString> prevTxnHandle);
 }

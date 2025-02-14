@@ -4,6 +4,7 @@ import com.google.cloud.datastore.AggregationResult;
 import com.google.cloud.datastore.QueryResults;
 import com.google.cloud.datastore.aggregation.Aggregation;
 import com.google.cloud.datastore.aggregation.AggregationBuilder;
+import com.google.cloud.datastore.models.ExplainOptions;
 import com.googlecode.objectify.LoadResult;
 import com.googlecode.objectify.cmd.QueryResultIterable;
 
@@ -16,10 +17,8 @@ import java.util.List;
  *
  * @author Jeff Schnitzer <jeff@infohazard.org>
  */
-abstract class Queryable<T> extends SimpleQueryImpl<T>
-{
-	/**
-	 */
+abstract class Queryable<T> extends SimpleQueryImpl<T> {
+
 	Queryable(final LoaderImpl loader) {
 		super(loader);
 	}
@@ -43,6 +42,12 @@ abstract class Queryable<T> extends SimpleQueryImpl<T>
 	}
 
 	@Override
+	public QueryResults<T> explain(final ExplainOptions options) {
+		final QueryImpl<T> q = createQuery();
+		return q.explain(options);
+	}
+
+	@Override
 	public AggregationResult aggregate(final Aggregation... aggregations) {
 		final QueryImpl<T> q = createQuery();
 		return q.aggregate(aggregations);
@@ -60,4 +65,10 @@ abstract class Queryable<T> extends SimpleQueryImpl<T>
 		return q.list();
 	}
 
+// TODO uncomment when this api lands in the google-cloud-datastore SDK
+//	@Override
+//	public ExplainResults<Entity> explain(final ExplainOptions options) {
+//		final QueryImpl<T> q = createQuery();
+//		return q.explain(options);
+//	}
 }

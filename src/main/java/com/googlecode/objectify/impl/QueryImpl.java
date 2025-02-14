@@ -11,6 +11,7 @@ import com.google.cloud.datastore.StructuredQuery.PropertyFilter;
 import com.google.cloud.datastore.Value;
 import com.google.cloud.datastore.aggregation.Aggregation;
 import com.google.cloud.datastore.aggregation.AggregationBuilder;
+import com.google.cloud.datastore.models.ExplainOptions;
 import com.google.common.base.MoreObjects;
 import com.googlecode.objectify.Key;
 import com.googlecode.objectify.LoadResult;
@@ -27,14 +28,14 @@ import lombok.SneakyThrows;
 
 import java.util.Iterator;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Implementation of Query.
  *
  * @author Jeff Schnitzer <jeff@infohazard.org>
  */
-public class QueryImpl<T> extends SimpleQueryImpl<T> implements Query<T>, Cloneable
-{
+public class QueryImpl<T> extends SimpleQueryImpl<T> implements Query<T>, Cloneable {
 	/**
 	 * Because we process @Load batches, we need to always work in chunks.  So we should always specify
 	 * a chunk size to the query.  This is the default if user does not specify an explicit chunk size.
@@ -79,17 +80,11 @@ public class QueryImpl<T> extends SimpleQueryImpl<T> implements Query<T>, Clonea
 		}
 	}
 
-	/* (non-Javadoc)
-	 * @see com.googlecode.objectify.impl.cmd.QueryBase#createQuery()
-	 */
 	@Override
 	QueryImpl<T> createQuery() {
 		return this.clone();
 	}
 
-	/* (non-Javadoc)
-	 * @see com.googlecode.objectify.cmd.Query#filter(java.lang.String, java.lang.Object)
-	 */
 	@Override
 	public QueryImpl<T> filter(final String condition, final Object value) {
 		final QueryImpl<T> q = createQuery();
@@ -97,7 +92,6 @@ public class QueryImpl<T> extends SimpleQueryImpl<T> implements Query<T>, Clonea
 		return q;
 	}
 
-	/* */
 	@Override
 	public QueryImpl<T> filter(final StructuredQuery.Filter filter) {
 		final QueryImpl<T> q = createQuery();
@@ -112,9 +106,6 @@ public class QueryImpl<T> extends SimpleQueryImpl<T> implements Query<T>, Clonea
 		return q;
 	}
 
-	/* (non-Javadoc)
-	 * @see com.googlecode.objectify.cmd.Query#order(java.lang.String)
-	 */
 	@Override
 	public QueryImpl<T> order(final String condition) {
 		final QueryImpl<T> q = createQuery();
@@ -279,72 +270,90 @@ public class QueryImpl<T> extends SimpleQueryImpl<T> implements Query<T>, Clonea
 		}
 	}
 
-	/* (non-Javadoc)
-	 * @see java.lang.Object#toString()
-	 */
+	/** Note this is meaningful as a cache key to uniquely identify the query */
 	@Override
 	public String toString() {
 		return MoreObjects.toStringHelper(this).add("query", actual).toString();
 	}
 
-	/* (non-Javadoc)
-	 * @see com.googlecode.objectify.cmd.Query#first()
-	 */
 	@Override
 	public LoadResult<T> first() {
-		// By the way, this is the same thing that PreparedQuery.asSingleEntity() does internally
-		final Iterator<T> it = this.limit(1).iterator();
+		return loader.ofy.factory().span("query", spanipulator -> {
+			spanipulator.attach(actual);
 
-		return new LoadResult<>(null, new IteratorFirstResult<>(it));
+			// By the way, this is the same thing that PreparedQuery.asSingleEntity() does internally
+			final Iterator<T> it = this.limit(1).iterator();
+
+			final LoadResult<T> result = new LoadResult<>(null, new IteratorFirstResult<>(it));
+
+			// The low level API is not async, so let's ensure work is finished in the span.
+			result.now();
+
+			return result;
+		});
 	}
 
 	@Override
 	public AggregationResult aggregate(final Aggregation... aggregations) {
-		return loader.createQueryEngine().queryAggregations(this.actual.newKeyQuery(), aggregations);
+		return loader.ofy.factory().span("aggregate", spanipulator -> {
+			spanipulator.attach(actual);
+
+			return loader.createQueryEngine().queryAggregations(this.actual.newKeyQuery(), aggregations);
+		});
 	}
 
 	@Override
 	public AggregationResult aggregate(final AggregationBuilder<?>... aggregations) {
-		return loader.createQueryEngine().queryAggregations(this.actual.newKeyQuery(), aggregations);
+		return loader.ofy.factory().span("aggregate", spanipulator -> {
+			spanipulator.attach(actual);
+
+			return loader.createQueryEngine().queryAggregations(this.actual.newKeyQuery(), aggregations);
+		});
 	}
 
-	/* (non-Javadoc)
-	 * @see com.googlecode.objectify.cmd.QueryExecute#iterable()
-	 */
 	@Override
 	public QueryResultIterable<T> iterable() {
 		return this::iterator;
 	}
 
-	/* (non-Javadoc)
-	 * @see com.google.cloud.datastore.QueryResultIterable#iterator()
-	 */
 	@Override
 	public QueryResults<T> iterator() {
-		if (!actual.getProjection().isEmpty())
-			return loader.createQueryEngine().queryProjection(this.actual.newProjectionQuery());
-		else if (shouldHybridize())
-			return loader.createQueryEngine().queryHybrid(this.actual.newKeyQuery(), chunk == null ? Integer.MAX_VALUE : chunk);
-		else
-			return loader.createQueryEngine().queryNormal(this.actual.newEntityQuery(), chunk == null ? Integer.MAX_VALUE : chunk);
+		return iterator(Optional.empty());
 	}
 
-	/* (non-Javadoc)
-	 * @see com.googlecode.objectify.cmd.Query#list()
-	 */
+	private QueryResults<T> iterator(final Optional<ExplainOptions> explain) {
+		return loader.ofy.factory().span("query", spanipulator -> {
+			// This is a bit odd from a span perspective; how should we track the iteration, which happens outside the span?
+
+			spanipulator.attach(actual);
+
+			if (!actual.getProjection().isEmpty())
+				return loader.createQueryEngine().queryProjection(this.actual.newProjectionQuery(), explain);
+			else if (shouldHybridize())
+				return loader.createQueryEngine().queryHybrid(this.actual.newKeyQuery(), chunk == null ? Integer.MAX_VALUE : chunk, explain);
+			else
+				return loader.createQueryEngine().queryNormal(this.actual.newEntityQuery(), chunk == null ? Integer.MAX_VALUE : chunk, explain);
+		});
+	}
+
 	@Override
 	public List<T> list() {
 		return ResultProxy.create(List.class, new MakeListResult<>(this.chunk(Integer.MAX_VALUE).iterator()));
+	}
+
+	@Override
+	public QueryResults<T> explain(final ExplainOptions options) {
+		return iterator(Optional.of(options));
 	}
 
 	/**
 	 * Get an iterator over the keys.  Not part of the public api, but used by QueryKeysImpl.  Assumes
 	 * that setKeysOnly() has already been set.
 	 */
-	QueryResults<Key<T>> keysIterator() {
+	QueryResults<Key<T>> keysIterator(final Optional<ExplainOptions> explain) {
 		final QueryEngine queryEngine = loader.createQueryEngine();
 		final KeyQuery query = this.actual.newKeyQuery();
-		return queryEngine.queryKeysOnly(query);
+		return queryEngine.queryKeysOnly(query, explain);
 	}
 
 	/**
@@ -361,10 +370,7 @@ public class QueryImpl<T> extends SimpleQueryImpl<T> implements Query<T>, Clonea
 		return false;
 	}
 
-	/* (non-Javadoc)
-	 * @see java.lang.Object#clone()
-	 */
-	@SuppressWarnings({"unchecked", "CloneDoesntDeclareCloneNotSupportedException"})
+	@SuppressWarnings({"unchecked"})
 	@SneakyThrows
 	public QueryImpl<T> clone() {
 		return (QueryImpl<T>)super.clone();

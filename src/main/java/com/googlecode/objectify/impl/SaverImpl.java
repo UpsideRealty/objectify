@@ -17,19 +17,14 @@ import java.util.Map;
  *
  * @author Jeff Schnitzer <jeff@infohazard.org>
  */
-public class SaverImpl implements Saver
-{
-	/** */
+public class SaverImpl implements Saver {
+
 	private final ObjectifyImpl ofy;
 
-	/** */
 	public SaverImpl(final ObjectifyImpl ofy) {
 		this.ofy = ofy;
 	}
 
-	/* (non-Javadoc)
-	 * @see com.googlecode.objectify.cmd.Saver#entity(java.lang.Object)
-	 */
 	@Override
 	public <E> Result<Key<E>> entity(final E entity) {
 		final Result<Map<Key<E>, E>> base = this.<E>entities(Collections.singleton(entity));
@@ -44,25 +39,21 @@ public class SaverImpl implements Saver
 		};
 	}
 
-	/* (non-Javadoc)
-	 * @see com.googlecode.objectify.cmd.Saver#entities(E[])
-	 */
 	@Override
 	public <E> Result<Map<Key<E>, E>> entities(final E... entities) {
 		return this.entities(Arrays.asList(entities));
 	}
 
-	/* (non-Javadoc)
-	 * @see com.googlecode.objectify.cmd.Saver#entities(java.lang.Iterable)
-	 */
 	@Override
 	public <E> Result<Map<Key<E>, E>> entities(final Iterable<E> entities) {
-		return ofy.createWriteEngine().save(entities);
+		return ofy.factory().span("save", spanipulator -> {
+			final Result<Map<Key<E>, E>> result = ofy.createWriteEngine().save(entities);
+			// The low level API is not async, so let's ensure work is finished in the span.
+			result.now();
+			return result;
+		});
 	}
 
-	/* (non-Javadoc)
-	 * @see com.googlecode.objectify.cmd.Saver#toEntity(java.lang.Object)
-	 */
 	@Override
 	public FullEntity<?> toEntity(final Object pojo) {
 		if (pojo instanceof FullEntity<?>) {

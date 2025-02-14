@@ -4,6 +4,7 @@ import com.google.cloud.datastore.Entity;
 import com.google.cloud.datastore.Key;
 import com.google.cloud.datastore.ReadOption;
 import com.google.protobuf.ByteString;
+import com.googlecode.objectify.TxnOptions;
 import com.googlecode.objectify.cache.EntityMemcache.Bucket;
 import com.googlecode.objectify.impl.AsyncDatastore;
 import com.googlecode.objectify.impl.AsyncTransaction;
@@ -15,6 +16,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.Future;
 
 /**
@@ -59,13 +61,8 @@ public class CachingAsyncDatastore extends CachingAsyncDatastoreReaderWriter imp
 	}
 
 	@Override
-	public AsyncTransaction newTransaction(final Runnable afterCommit) {
-		return new CachingAsyncTransaction(raw.newTransaction(afterCommit), memcache);
-	}
-
-	@Override
-	public AsyncTransaction newTransaction(final Runnable afterCommit, ByteString prevTxnHandle) {
-		return new CachingAsyncTransaction(raw.newTransaction(afterCommit, prevTxnHandle), memcache);
+	public AsyncTransaction newTransaction(final TxnOptions options, final Runnable afterCommit, Optional<ByteString> prevTxnHandle) {
+		return new CachingAsyncTransaction(raw.newTransaction(options, afterCommit, prevTxnHandle), memcache);
 	}
 
 	@Override

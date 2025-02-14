@@ -1,5 +1,7 @@
 package com.googlecode.objectify.cmd;
 
+import com.google.cloud.datastore.QueryResults;
+import com.google.cloud.datastore.models.ExplainOptions;
 import com.googlecode.objectify.LoadResult;
 
 import java.util.List;
@@ -14,8 +16,7 @@ import java.util.stream.StreamSupport;
  *
  * @author Jeff Schnitzer <jeff@infohazard.org>
  */
-public interface QueryExecute<T> extends QueryResultIterable<T>
-{
+public interface QueryExecute<T> extends QueryResultIterable<T> {
 	/**
 	 * <p>Starts an asynchronous query which will return entities.</p>
 	 *
@@ -47,6 +48,19 @@ public interface QueryExecute<T> extends QueryResultIterable<T>
 	 * @return an asynchronous result containing the first result.  The result will hold null if the result set is empty.
 	 */
 	LoadResult<T> first();
+
+	/**
+	 * Convenience method for the default explain options, which plans but does not analyze.
+	 * https://cloud.google.com/datastore/docs/multiple-range-optimize-indexes
+	 */
+	default QueryResults<T> explain() {
+		return explain(ExplainOptions.newBuilder().build());
+	}
+
+	/**
+	 * https://cloud.google.com/datastore/docs/multiple-range-optimize-indexes
+	 */
+	QueryResults<T> explain(ExplainOptions options);
 
 	/**
 	 * <p>Generates a string that consistently and uniquely specifies this query.  There

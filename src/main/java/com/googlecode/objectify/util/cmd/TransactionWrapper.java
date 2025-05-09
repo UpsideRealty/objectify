@@ -1,5 +1,7 @@
 package com.googlecode.objectify.util.cmd;
 
+import com.google.cloud.datastore.AggregationQuery;
+import com.google.cloud.datastore.AggregationResults;
 import com.google.cloud.datastore.Datastore;
 import com.google.cloud.datastore.Entity;
 import com.google.cloud.datastore.FullEntity;
@@ -7,6 +9,7 @@ import com.google.cloud.datastore.Key;
 import com.google.cloud.datastore.Query;
 import com.google.cloud.datastore.QueryResults;
 import com.google.cloud.datastore.Transaction;
+import com.google.cloud.datastore.models.ExplainOptions;
 import com.google.protobuf.ByteString;
 import lombok.Data;
 
@@ -39,6 +42,21 @@ public class TransactionWrapper implements Transaction {
 	@Override
 	public <T> QueryResults<T> run(final Query<T> query) {
 		return raw.run(query);
+	}
+
+	@Override
+	public AggregationResults runAggregation(AggregationQuery aggregationQuery) {
+		return raw.runAggregation(aggregationQuery);
+	}
+
+	@Override
+	public AggregationResults runAggregation(AggregationQuery aggregationQuery, ExplainOptions explainOptions) {
+		return raw.runAggregation(aggregationQuery, explainOptions);
+	}
+
+	@Override
+	public <T> QueryResults<T> run(Query<T> query, ExplainOptions explainOptions) {
+		return raw.run(query, explainOptions);
 	}
 
 	@Override

@@ -4,8 +4,11 @@ import com.google.cloud.datastore.Cursor;
 import com.google.cloud.datastore.Entity;
 import com.google.cloud.datastore.Key;
 import com.google.cloud.datastore.QueryResults;
+import com.google.cloud.datastore.models.ExplainMetrics;
 import com.google.datastore.v1.QueryResultBatch.MoreResultsType;
 import lombok.RequiredArgsConstructor;
+
+import java.util.Optional;
 
 /**
  * Takes a normal Entity-based QueryResults and converts it to a Key-based QueryResults while
@@ -47,5 +50,10 @@ class StuffingQueryResults implements QueryResults<Key> {
 	@Override
 	public MoreResultsType getMoreResults() {
 		return base.getMoreResults();
+	}
+
+	@Override
+	public Optional<ExplainMetrics> getExplainMetrics() {
+		return base.getExplainMetrics();
 	}
 }

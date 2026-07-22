@@ -116,19 +116,17 @@
 				</configuration>
 			</plugin>
 
+			<!--
+				Available on demand via `mvn versions:display-dependency-updates` /
+				`mvn versions:display-plugin-updates`. Not bound to the build lifecycle:
+				these informational goals poll every configured repository (including the
+				private artifactregistry ones, which require GCP credentials) on every
+				build, which needlessly breaks credential-less builds such as CI.
+			-->
 			<plugin>
 				<groupId>org.codehaus.mojo</groupId>
 				<artifactId>versions-maven-plugin</artifactId>
 				<version>2.16.0</version>
-				<executions>
-					<execution>
-						<phase>compile</phase>
-						<goals>
-							<goal>display-dependency-updates</goal>
-							<goal>display-plugin-updates</goal>
-						</goals>
-					</execution>
-				</executions>
 			</plugin>
 		</plugins>
 	</build>

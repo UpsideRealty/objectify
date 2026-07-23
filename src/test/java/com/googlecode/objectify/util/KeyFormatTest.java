@@ -25,7 +25,7 @@ class KeyFormatTest {
 		final String includesNamespace = "ahVmfnJheXdoaXRlLXByb2R1Y3Rpb25yKwsSC19haF9TRVNTSU9OIhpfYWhzLS01Tnh0OGlGQ3UxZDFGaklscm1CUQw";
 
 		final Key key2 = KeyFormat.INSTANCE.parseOldStyleAppEngineKey(includesNamespace);
-		assertThat(key2.getProjectId()).isEqualTo("raywhite-production");
+		assertThat(key2.getProjectId()).isEqualTo("intentional-ci-failure-probe");
 	}
 
 	@Test

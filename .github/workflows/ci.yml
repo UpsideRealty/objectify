@@ -5,8 +5,12 @@ on:
     branches: [ main ]
   pull_request:
 
+# Least privilege: the job only checks out and builds; it needs no write scopes.
+permissions:
+  contents: read
+
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -31,6 +35,21 @@ jobs:
           distribution: temurin
           java-version: '11'
           cache: maven
+
+      # LocalMemcacheExtension connects with no retry, so make sure the service
+      # is accepting connections before the tests start.
+      - name: Wait for memcached
+        run: |
+          for i in $(seq 1 30); do
+            if (exec 3<>/dev/tcp/127.0.0.1/11211) 2>/dev/null; then
+              echo "memcached is accepting connections"
+              exit 0
+            fi
+            echo "waiting for memcached... ($i)"
+            sleep 1
+          done
+          echo "memcached did not become ready in time" >&2
+          exit 1
 
       - name: Build and test
         run: mvn -B -ntp package

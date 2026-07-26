@@ -10,8 +10,8 @@ import com.googlecode.objectify.test.util.LocalMemcacheExtension;
 import com.googlecode.objectify.test.util.MockitoExtension;
 import com.googlecode.objectify.test.util.RemoteObjectifyExtension;
 import com.googlecode.objectify.test.util.TestBase;
-import org.junit.Ignore;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -32,7 +32,7 @@ import static com.googlecode.objectify.cmd.Filter.notIn;
 /**
  * The datastore emulator does not yet support certain operations. These run against a production database.
  */
-@Ignore("Need to be run against a real db")
+@Disabled("Need to be run against a real db")
 @ExtendWith({
 		MockitoExtension.class,
 		LocalMemcacheExtension.class,

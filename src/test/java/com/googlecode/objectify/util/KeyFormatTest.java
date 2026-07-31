@@ -29,6 +29,17 @@ class KeyFormatTest {
 	}
 
 	@Test
+	void stripsGLocationPrefixFromProjectId() throws Exception {
+		// Same key as the Australian edition above but with a "g~" location prefix instead of
+		// "f~". "g~" was not in the previous explicit allow-list, so it used to slip through
+		// unnormalised and fail downstream against a native Firestore-in-Datastore project.
+		final String gPrefixed = "ahVnfnJheXdoaXRlLXByb2R1Y3Rpb25yKwsSC19haF9TRVNTSU9OIhpfYWhzLS01Tnh0OGlGQ3UxZDFGaklscm1CUQw";
+
+		final Key key = KeyFormat.INSTANCE.parseOldStyleAppEngineKey(gPrefixed);
+		assertThat(key.getProjectId()).isEqualTo("raywhite-production");
+	}
+
+	@Test
 	void parsesAndFormatsOldStyleGAEKeyWithANamespace() throws Exception {
 		// This should stay as-is
 		final String hasNamespace = "agxzfm1haWxmb29nYWVyMQsSDE9yZ2FuaXphdGlvbiIKc3RyZWFrLmNvbQwLEghXb3JrZmxvdxiAgJaV__usCgw";

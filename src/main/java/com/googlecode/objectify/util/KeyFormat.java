@@ -123,7 +123,13 @@ public enum KeyFormat {
         final DynamicMessage userKeyMessage = DynamicMessage.newBuilder(referenceDescriptor).mergeFrom(userKey).build();
         String app = (String) userKeyMessage.getField(referenceDescriptor.findFieldByName("app"));
 
-        if (app.startsWith("s~") || app.startsWith("f~") || app.startsWith("a~")) {
+        // Legacy App Engine app ids embed the location as a single-letter partition prefix
+        // ("s~", "e~", "f~", "g~", ...). Native Firestore-in-Datastore projects have no legacy
+        // app id, so the Datastore v1 API rejects any partition carrying such a prefix. Strip
+        // any "<letter>~" prefix rather than an explicit allow-list of letters, otherwise keys
+        // from a location whose letter is not listed (e.g. "g~") slip through unnormalised and
+        // fail downstream with an invalid-project-id error.
+        if (hasLegacyLocationPrefix(app)) {
             app = app.substring(2);
         }
         final String namespace = (String) userKeyMessage.getField(referenceDescriptor.findFieldByName("name_space"));
@@ -200,5 +206,17 @@ public enum KeyFormat {
         }
         keyMessageBuilder.setField(referenceDescriptor.findFieldByName("path"), pathBuilder.build());
         return BaseEncoding.base64Url().omitPadding().encode(keyMessageBuilder.build().toByteArray());
+    }
+
+    /**
+     * True when [app] begins with a legacy App Engine location partition prefix of the form
+     * "&lt;letter&gt;~" (e.g. "s~", "e~", "f~", "g~"). Matches a single ASCII lowercase letter
+     * followed by '~' rather than an explicit allow-list of known letters.
+     */
+    private static boolean hasLegacyLocationPrefix(final String app) {
+        return app.length() >= 2
+                && app.charAt(1) == '~'
+                && app.charAt(0) >= 'a'
+                && app.charAt(0) <= 'z';
     }
 }

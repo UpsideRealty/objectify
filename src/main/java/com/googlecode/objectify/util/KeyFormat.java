@@ -123,12 +123,7 @@ public enum KeyFormat {
         final DynamicMessage userKeyMessage = DynamicMessage.newBuilder(referenceDescriptor).mergeFrom(userKey).build();
         String app = (String) userKeyMessage.getField(referenceDescriptor.findFieldByName("app"));
 
-        // Legacy App Engine app ids embed the location as a single-letter partition prefix
-        // ("s~", "e~", "f~", "g~", ...). Native Firestore-in-Datastore projects have no legacy
-        // app id, so the Datastore v1 API rejects any partition carrying such a prefix. Strip
-        // any "<letter>~" prefix rather than an explicit allow-list of letters, otherwise keys
-        // from a location whose letter is not listed (e.g. "g~") slip through unnormalised and
-        // fail downstream with an invalid-project-id error.
+        // Datastore v1 rejects a partition carrying a legacy App Engine location prefix.
         if (hasLegacyLocationPrefix(app)) {
             app = app.substring(2);
         }

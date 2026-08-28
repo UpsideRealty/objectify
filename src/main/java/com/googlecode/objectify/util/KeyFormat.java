@@ -123,7 +123,8 @@ public enum KeyFormat {
         final DynamicMessage userKeyMessage = DynamicMessage.newBuilder(referenceDescriptor).mergeFrom(userKey).build();
         String app = (String) userKeyMessage.getField(referenceDescriptor.findFieldByName("app"));
 
-        if (app.startsWith("s~") || app.startsWith("f~") || app.startsWith("a~")) {
+        // Datastore v1 rejects a partition carrying a legacy App Engine location prefix.
+        if (hasLegacyLocationPrefix(app)) {
             app = app.substring(2);
         }
         final String namespace = (String) userKeyMessage.getField(referenceDescriptor.findFieldByName("name_space"));
@@ -200,5 +201,17 @@ public enum KeyFormat {
         }
         keyMessageBuilder.setField(referenceDescriptor.findFieldByName("path"), pathBuilder.build());
         return BaseEncoding.base64Url().omitPadding().encode(keyMessageBuilder.build().toByteArray());
+    }
+
+    /**
+     * True when [app] begins with a legacy App Engine location partition prefix of the form
+     * "&lt;letter&gt;~" (e.g. "s~", "e~", "f~", "g~"). Matches a single ASCII lowercase letter
+     * followed by '~' rather than an explicit allow-list of known letters.
+     */
+    private static boolean hasLegacyLocationPrefix(final String app) {
+        return app.length() >= 2
+                && app.charAt(1) == '~'
+                && app.charAt(0) >= 'a'
+                && app.charAt(0) <= 'z';
     }
 }

@@ -111,11 +111,11 @@ class TransactorNo extends Transactor {
 			parent.getOptions(),
 			new TransactorYes(parent.factory(), options, parent.getOptions().isCache(), this, Optional.ofNullable(prevTxnHandle.get()))
 		);
-		prevTxnHandle.set(txnOfy.getTransaction().getTransactionHandle());
 
 		boolean committedSuccessfully = false;
 		boolean finishedInExceptionBlock = false;
 		try {
+			prevTxnHandle.set(txnOfy.getTransaction().getTransactionHandle());
 			final R result = work.run();
 			txnOfy.flush();
 			txnOfy.getTransaction().commit();

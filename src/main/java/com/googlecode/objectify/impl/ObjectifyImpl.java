@@ -256,11 +256,17 @@ public class ObjectifyImpl implements Objectify, Closeable {
 	 */
 	@Override
 	public void close() {
-		// The order of these three operations is significant
-		flush();
-
-		PendingFutures.completeAllPendingFutures();
-
-		factory().close(this);
+		// The order of these three operations is significant. The pop must happen even when flushing throws, which it
+		// always does for a rolled-back transaction holding deferred work; otherwise this instance stays on the stack
+		// and ofy() keeps resolving to a dead transaction for the rest of the thread.
+		try {
+			try {
+				flush();
+			} finally {
+				PendingFutures.completeAllPendingFutures();
+			}
+		} finally {
+			factory().close(this);
+		}
 	}
 }

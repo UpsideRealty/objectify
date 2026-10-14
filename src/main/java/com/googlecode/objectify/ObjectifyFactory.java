@@ -30,6 +30,7 @@ import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.SpanKind;
 import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.context.Scope;
+import lombok.extern.slf4j.Slf4j;
 import net.spy.memcached.MemcachedClient;
 
 import javax.annotation.Nullable;
@@ -67,6 +68,7 @@ import java.util.stream.Collectors;
  *
  * @author Jeff Schnitzer <jeff@infohazard.org>
  */
+@Slf4j
 public class ObjectifyFactory implements Forge {
 
 	/** For OpenTelemetry */
@@ -418,8 +420,21 @@ public class ObjectifyFactory implements Forge {
 		if (stack.isEmpty())
 			throw new IllegalStateException("You have already destroyed the Objectify context.");
 
-		final Objectify popped = stack.removeLast();
-		assert popped == ofy : "Mismatched objectify instances; somehow the stack was corrupted";
+		if (stack.getLast() == ofy) {
+			stack.removeLast();
+			return;
+		}
+
+		// Checked explicitly because asserts are off in production, where a corrupted stack would otherwise go
+		// unnoticed while ofy() hands out whichever instance leaked on top.
+		if (stack.stream().noneMatch(stacked -> stacked == ofy))
+			throw new IllegalStateException("Closing an Objectify instance which is not on the stack; somehow the stack was corrupted");
+
+		int leaked = 0;
+		while (stack.removeLast() != ofy)
+			leaked++;
+
+		log.error("Discarded {} Objectify instance(s) leaked above the one being closed; somehow the stack was corrupted", leaked);
 	}
 
 	//

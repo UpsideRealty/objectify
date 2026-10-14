@@ -5,6 +5,7 @@ package com.googlecode.objectify.test;
 
 import com.google.cloud.datastore.DatastoreException;
 import com.googlecode.objectify.Key;
+import com.googlecode.objectify.Objectify;
 import com.googlecode.objectify.TxnType;
 import com.googlecode.objectify.annotation.Cache;
 import com.googlecode.objectify.annotation.Entity;
@@ -386,6 +387,31 @@ class TransactionTests extends TestBase {
 
 		assertThat(counter.counter).isEqualTo(3);
 		assertThat(listener.getCommitCount()).isEqualTo(1);
+	}
+
+	/**
+	 * A deferred save cannot be flushed into a rolled-back attempt, so closing that attempt throws. The attempt
+	 * must still come off the stack, or the retry returns with ofy() resolving to the dead transaction.
+	 */
+	@Test
+	void retriedAttemptWithDeferredSaveDoesNotLeakOntoTheStack() {
+		factory().register(Trivial.class);
+
+		final Objectify outerOfy = ofy();
+		final Counter counter = new Counter();
+
+		ofy().transactNew(2, () -> {
+			counter.counter++;
+			ofy().defer().save().entity(new Trivial("foo", 5));
+
+			if (counter.counter < 2) {
+				throw new DatastoreException(10, "too much contention on these datastore entities", "ABORTED");
+			}
+		});
+
+		assertThat(counter.counter).isEqualTo(2);
+		assertThat(ofy()).isSameInstanceAs(outerOfy);
+		assertThat(ofy().getTransaction()).isNull();
 	}
 
 	/**

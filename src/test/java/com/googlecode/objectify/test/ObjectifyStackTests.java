@@ -1,6 +1,3 @@
-/*
- */
-
 package com.googlecode.objectify.test;
 
 import com.googlecode.objectify.Objectify;
@@ -18,7 +15,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  */
 class ObjectifyStackTests extends TestBase {
 
-	/** */
 	@Test
 	void closingDiscardsInstancesLeakedAboveIt() {
 		final Objectify outerOfy = ofy();
@@ -30,7 +26,6 @@ class ObjectifyStackTests extends TestBase {
 		assertThat(ofy()).isSameInstanceAs(outerOfy);
 	}
 
-	/** */
 	@Test
 	void closingAnInstanceNotOnTheStackThrowsAndLeavesTheStackAlone() {
 		final Objectify outerOfy = ofy();

@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -208,6 +209,8 @@ class ValkeyCacheServiceTests {
 		final int writers = 10;
 		final ExecutorService pool = Executors.newFixedThreadPool(writers);
 		final CountDownLatch start = new CountDownLatch(1);
+		// Every writer must read the seed before any CAS lands, or a late reader sees the winner's value and wins too.
+		final CyclicBarrier allRead = new CyclicBarrier(writers);
 		final AtomicInteger wins = new AtomicInteger();
 
 		try {
@@ -217,6 +220,7 @@ class ValkeyCacheServiceTests {
 					try {
 						start.await();
 						final IdentifiableValue iv = cache.getIdentifiables(Arrays.asList(key)).get(key);
+						allRead.await(10, TimeUnit.SECONDS);
 						final Set<String> won = cache.putIfUntouched(
 								Map.of(key, new CasPut(iv, myValue, 0)));
 						if (won.contains(key)) {

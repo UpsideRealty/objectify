@@ -1,6 +1,7 @@
 package com.googlecode.objectify.test;
 
 import com.googlecode.objectify.Objectify;
+import com.googlecode.objectify.ObjectifyStackCorruptedException;
 import com.googlecode.objectify.test.util.TestBase;
 import com.googlecode.objectify.util.Closeable;
 import org.junit.jupiter.api.Test;
@@ -32,7 +33,7 @@ class ObjectifyStackTests extends TestBase {
 		final Closeable alreadyClosed = factory().begin();
 		alreadyClosed.close();
 
-		assertThrows(IllegalStateException.class, alreadyClosed::close);
+		assertThrows(ObjectifyStackCorruptedException.class, alreadyClosed::close);
 
 		assertThat(ofy()).isSameInstanceAs(outerOfy);
 	}

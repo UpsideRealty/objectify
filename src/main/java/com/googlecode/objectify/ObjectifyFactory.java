@@ -428,7 +428,7 @@ public class ObjectifyFactory implements Forge {
 		// Checked explicitly because asserts are off in production, where a corrupted stack would otherwise go
 		// unnoticed while ofy() hands out whichever instance leaked on top.
 		if (stack.stream().noneMatch(stacked -> stacked == ofy))
-			throw new IllegalStateException("Closing an Objectify instance which is not on the stack; somehow the stack was corrupted");
+			throw new ObjectifyStackCorruptedException("Closing an Objectify instance which is not on the stack; somehow the stack was corrupted");
 
 		int leaked = 0;
 		while (stack.removeLast() != ofy)

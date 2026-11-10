@@ -60,6 +60,13 @@ public class ObjectifyService {
 	}
 
 	/**
+	 * @return the current singleton factory, or null if ObjectifyService.init() has not been called
+	 */
+	public static ObjectifyFactory factoryOrNull() {
+		return factory;
+	}
+
+	/**
 	 * <p>A shortcut for {@code factory().register()}</p>
 	 */
 	public static void register(Class<?> clazz) {

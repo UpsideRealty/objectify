@@ -2,6 +2,7 @@ package com.googlecode.objectify.impl;
 
 import com.google.cloud.datastore.BaseKey;
 import com.google.cloud.datastore.Datastore;
+import com.google.cloud.datastore.DatastoreOptions;
 import com.google.cloud.datastore.FullEntity;
 import com.google.cloud.datastore.IncompleteKey;
 import com.google.cloud.datastore.KeyFactory;
@@ -11,6 +12,8 @@ import com.google.cloud.datastore.Value;
 import com.google.common.base.Preconditions;
 import com.googlecode.objectify.Key;
 import com.googlecode.objectify.NamespaceManager;
+import com.googlecode.objectify.ObjectifyFactory;
+import com.googlecode.objectify.ObjectifyService;
 import com.googlecode.objectify.Ref;
 import com.googlecode.objectify.util.KeyFormat;
 import lombok.RequiredArgsConstructor;
@@ -284,6 +287,25 @@ public class Keys
 		} else {
 			return com.google.cloud.datastore.Key.fromUrlSafe(urlSafeKey);
 		}
+	}
+
+	/**
+	 * Rebinds a key to the project and database of the registered factory's Datastore. Before
+	 * ObjectifyService.init() there is no factory, and the key is returned unchanged.
+	 */
+	public static com.google.cloud.datastore.Key bindToFactory(final com.google.cloud.datastore.Key key) {
+		final ObjectifyFactory factory = ObjectifyService.factoryOrNull();
+		if (factory == null)
+			return key;
+
+		final DatastoreOptions options = factory.datastore().getOptions();
+		if (key.getProjectId().equals(options.getProjectId()) && key.getDatabaseId().equals(options.getDatabaseId()))
+			return key;
+
+		return com.google.cloud.datastore.Key.newBuilder(key)
+				.setProjectId(options.getProjectId())
+				.setDatabaseId(options.getDatabaseId())
+				.build();
 	}
 
 	/** Be sensitive to the thread local namespace, if set */

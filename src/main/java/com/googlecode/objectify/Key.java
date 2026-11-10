@@ -38,14 +38,15 @@ public class Key<T> implements Serializable, Comparable<Key<?>>
 	 * <p>Create an Objectify key from a web safe string. Understands both 'modern' (Cloud SDK) and 'legacy' GAE formats
 	 * (which always start with 'a'). These can be generated with toUrlSafeString() and toLegacyUrlSafeString(), respectively.</p>
 	 *
-	 * <p>This does not require a specific datastore connection
-	 * so it can be a static method.</p>
+	 * <p>The key is bound to the project and database of the registered factory's Datastore, when there is one.
+	 * Both string formats carry the project of whoever encoded them, and the legacy format carries no database, so a
+	 * string written before a database or project move would otherwise decode to the old location.</p>
 	 */
 	public static <T> Key<T> create(final String urlSafeString) {
 		if (urlSafeString == null)
 			throw new NullPointerException("Cannot create a Key<?> from a null String");
 
-		return new Key<>(Keys.fromUrlSafe(urlSafeString));
+		return new Key<>(Keys.bindToFactory(Keys.fromUrlSafe(urlSafeString)));
 	}
 
 	/** This is an alias for Key.create(String). Helps with JAX-RS compliance. */
